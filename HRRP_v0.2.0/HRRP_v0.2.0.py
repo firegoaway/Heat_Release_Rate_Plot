@@ -5,11 +5,18 @@ from tkinter.filedialog import askopenfilename
 import os
 import numpy as np
 
+def addToClipBoard(text):
+    command = 'echo ' + text.strip() + '| clip'
+    os.system(command)
+
 def main():
     root = Tk()
-    root.withdraw()
+    root.title("HRRP v0.2.0")
+    root.iconbitmap('.gitpics\\hrrp.ico')
+    root.wm_iconbitmap('.gitpics\\hrrp.ico')
+    # root.withdraw()
 
-    file_path = askopenfilename(title="Выберите _hrr.csv файл", filetypes=[("CSV files", "*.csv")])
+    file_path = askopenfilename(title="Выберите _hrr.csv файл", filetypes=[("Файлы формата CSV", "*.csv")])
     
     if not file_path:
         print("Ничего не выбрано")
@@ -35,13 +42,19 @@ def main():
         print(f"Ошибка: {e}, убедитесь, что CSV файл содержит колонки 'Time' и 'HRR'")
         return
 
+    # Обозначаем пути для сохранения картинок
+    output_folder_path = os.path.normpath(os.path.join(os.path.dirname(file_path), '..', '..', '..'))
+    second_folder_name = os.path.basename(os.path.normpath(os.path.join(os.path.dirname(file_path), '..')))
+    output_file_name = f"hrrp_{second_folder_name}_plot.png"
+    save_path = os.path.join(output_folder_path, output_file_name)
+
     # Рисуем график
     plt.figure(figsize=(8, 5))
     plt.plot(time, hrr, color='red', linewidth=0.5)
     plt.scatter(time, hrr, color='black', s=1)
     plt.xlabel('Время (сек)')
     plt.ylabel('Мощность пожара (кВт)')
-    plt.title('График мощности пожара')
+    plt.title('График мощности пожара', fontsize=12)
     plt.legend()
     
     x_ticks = np.arange(min(time), max(time) + 20, 20)
@@ -52,7 +65,11 @@ def main():
     
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     
-    plt.show()
+    addToClipBoard(second_folder_name)
+    
+    # Сохраняем график в изображение, GUI не отображаем
+    plt.savefig(save_path, bbox_inches='tight', format='png')  # Можно добавить dpi=300 для большего разрешения картинок
+    plt.close()  # Закрываем инстанс, освобождаем память
 
 if __name__ == "__main__":
     main()
