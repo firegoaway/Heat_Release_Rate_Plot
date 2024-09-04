@@ -10,10 +10,14 @@ def addToClipBoard(text):
     os.system(command)
 
 def main():
+    current_directory = os.path.dirname(__file__)
+    parent_directory = os.path.abspath(os.path.join(current_directory, os.pardir))
+    icon_path = os.path.join(parent_directory, '.gitpics', 'hrrp.ico')
+    
     root = Tk()
-    root.title("HRRP v0.2.0")
-    root.iconbitmap('.gitpics\\hrrp.ico')
-    root.wm_iconbitmap('.gitpics\\hrrp.ico')
+    root.title("HRRP v0.2.1")
+    root.iconbitmap(icon_path)
+    root.wm_iconbitmap(icon_path)
     # root.withdraw()
 
     file_path = askopenfilename(title="Выберите _hrr.csv файл", filetypes=[("Файлы формата CSV", "*.csv")])
@@ -56,13 +60,13 @@ def main():
     plt.ylabel('Мощность пожара (кВт)')
     plt.title('График мощности пожара', fontsize=12)
     plt.legend()
-    
+    """
     x_ticks = np.arange(min(time), max(time) + 20, 20)
     y_ticks = np.arange(min(hrr), max(hrr) + 100, 100)
 
     plt.xticks(x_ticks)
     plt.yticks(y_ticks)
-    
+    """
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     
     addToClipBoard(second_folder_name)
