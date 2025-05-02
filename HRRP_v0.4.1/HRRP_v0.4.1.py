@@ -154,6 +154,7 @@ def main():
 
     fds_file_path = None
     csv_file_path = None
+    fds_dir = "Unknown" # Инициализируем fds_dir
 
     if os.path.isfile(ini_file_path):
         try:
@@ -161,81 +162,80 @@ def main():
             if 'filePath' in config and 'filePath' in config['filePath']:
                 fds_file_path = config['filePath']['filePath']
                 fds_dir = os.path.dirname(fds_file_path)
-                fds_basename = os.path.splitext(os.path.basename(fds_file_path))[0] # e.g., '21cd5693_tout' or '21cd5693'
+                fds_basename = os.path.splitext(os.path.basename(fds_file_path))[0] # e.g., 'base_nfs_tout'
 
-                # Шаблон 1: Использовать fds_basename как есть и добавить _hrr.csv
-                csv_filename_pattern1 = f"{fds_basename}*_hrr.csv" # e.g., 21cd5693_tout_hrr.csv or 21cd5693_hrr.csv
-                csv_file_path_pattern1 = os.path.join(fds_dir, csv_filename_pattern1)
+                # --- Новая логика для поиска базовой части ---
+                base_part = fds_basename
+                # Порядок важен: проверяем самые длинные комбинированные постфиксы первыми
+                postfixes = ['_nfs_tout', '_tout_nfs', '_nfs', '_tout']
+                for postfix in postfixes:
+                    if base_part.endswith(postfix):
+                        base_part = base_part[:-len(postfix)]
+                        break # Удаляем только первый совпадающий постфикс с конца
+                # --- Конец новой логики ---
 
-                # Шаблон 2: Если fds_basename заканчивается на _tout, удалить его перед добавлением _hrr.csv
-                fds_basename_without_tout = fds_basename
-                if fds_basename.endswith('_tout'):
-                    fds_basename_without_tout = fds_basename[:-len('_tout')] # Remove _tout -> e.g., 21cd5693
+                # Конструируем шаблон поиска с использованием извлеченной базовой части
+                csv_filename_pattern = f"{base_part}*_hrr.csv" # e.g., base*_hrr.csv
+                csv_file_path_pattern = os.path.join(fds_dir, csv_filename_pattern)
 
-                csv_filename_pattern2 = f"{fds_basename_without_tout}*_hrr.csv" # e.g., 21cd5693_hrr.csv
-                csv_file_path_pattern2 = os.path.join(fds_dir, csv_filename_pattern2)
+                # Поиск с использованием glob
+                found_files = glob.glob(csv_file_path_pattern)
 
-                # Проверка существования с использованием glob, приоритезируя шаблон 1
-                found_files_pattern1 = glob.glob(csv_file_path_pattern1)
-                if found_files_pattern1:
-                    csv_file_path = found_files_pattern1[0] # Взять первый совпавший файл
-                    print(f"Найден CSV файл (Шаблон 1): {csv_file_path}")
+                if found_files:
+                    # Сортируем найденные файлы для обработки потенциальных множественных совпадений (например, base_1_hrr.csv, base_2_hrr.csv)
+                    # Взятие первого алфавитно может быть достаточным, или отрегулировать, если нужно конкретная логика.
+                    found_files.sort()
+                    csv_file_path = found_files[0] # Взять первый совпавший файл
+                    print(f"Найден CSV файл по шаблону '{csv_filename_pattern}': {csv_file_path}")
                 else:
-                    # Если шаблон 1 не подходит, попробуйте шаблон 2
-                    found_files_pattern2 = glob.glob(csv_file_path_pattern2)
-                    if found_files_pattern2:
-                        csv_file_path = found_files_pattern2[0] # Взять первый совпавший файл
-                        print(f"Найден CSV файл (Шаблон 2): {csv_file_path}")
-                    else:
-                        csv_file_path = None # Убедиться, что он None, если ни один не найден
-                        print(f"Не удалось найти {csv_filename_pattern1} или {csv_filename_pattern2} в {fds_dir}")
+                    csv_file_path = None # Убедимся, что он None, если не найден
+                    print(f"Не удалось найти файл по шаблону '{csv_filename_pattern}' в {fds_dir}")
 
             else:
                 messagebox.showerror("Ошибка INI", f"Не найдена секция [filePath] или ключ 'filePath' в {ini_file_path}")
-                return
+                return # Выход, если структура INI неверна
         except Exception as e:
             messagebox.showerror("Ошибка чтения INI", f"Не удалось прочитать файл {ini_file_path}: {e}")
-            return
+            return # Выход при ошибке чтения INI
     else:
         messagebox.showerror("Ошибка INI", f"INI файл не найден по пути: {ini_file_path}")
-        return
+        return # Выход, если INI файл не существует
 
-    if not csv_file_path: # Проверяем, является ли csv_file_path None после попыток
-        # Нужно перестроить потенциальные имена для сообщения об ошибке
-        # Получаем базовую информацию из config снова, так как fds_file_path может быть None
-        fds_dir_for_error = "Unknown"
-        expected_name1 = "Unknown"
-        expected_name2 = "Unknown"
+    if not csv_file_path: # Если файл не найден автоматически
+        # --- Логика для ручного выбора файла ---
+        # Отрегулируйте сообщение об ошибке, чтобы отразить новую логику шаблона.
+        expected_name = "Unknown"
+        # Попробуйте восстановить ожидаемый шаблон для сообщения об ошибке
         if 'filePath' in config and 'filePath' in config['filePath']:
-            try:
-                config_fds_path = config['filePath']['filePath']
-                fds_dir_for_error = os.path.dirname(config_fds_path)
+             try:
+                config_fds_path = config['filePath']['filePath'] # Предполагаем, что config был успешно прочитан, если мы здесь
                 fds_basename_for_error = os.path.splitext(os.path.basename(config_fds_path))[0]
-                expected_name1 = f"{fds_basename_for_error}*_hrr.csv"
-                
-                fds_basename_without_tout_for_error = fds_basename_for_error
-                if fds_basename_for_error.endswith('_tout'):
-                    fds_basename_without_tout_for_error = fds_basename_for_error[:-len('_tout')]
-                expected_name2 = f"{fds_basename_without_tout_for_error}*_hrr.csv"
-            except Exception:
-                 pass # Keep unknowns if error reconstructing path
+                base_part_for_error = fds_basename_for_error
+                postfixes_for_error = ['_nfs_tout', '_tout_nfs', '_nfs', '_tout']
+                for postfix in postfixes_for_error:
+                    if base_part_for_error.endswith(postfix):
+                        base_part_for_error = base_part_for_error[:-len(postfix)]
+                        break
+                expected_name = f"{base_part_for_error}*_hrr.csv"
+             except Exception:
+                 pass # Keep expected_name as Unknown if reconstruction fails
+        # Убедимся, что fds_dir используется в сообщении, если доступен
+        dir_for_msg = fds_dir if fds_dir != "Unknown" else "определенной директории"
+        messagebox.showerror("Ошибка CSV", f"CSV файл не найден в: {dir_for_msg}\nОжидаемый шаблон имени: {expected_name}\n\nБудет предложено выбрать файл вручную.")
 
-        messagebox.showerror("Ошибка CSV", f"CSV файл не найден в директории: {fds_dir_for_error}\nОжидаемые имена: \n- {expected_name1}\n- {expected_name2}\n\nБудет предложено выбрать файл вручную.")
-
-        # --- Вариант выбора файла вручную ---
-        root_temp = Tk() # Создаем временное скрытое окно корня для диалога
+        # --- Код выбора файла вручную (остается почти неизменным) ---
+        root_temp = Tk()
         root_temp.withdraw()
         root_temp.attributes('-topmost', True)
-        # Устанавливаем начальную директорию для диалога
-        initial_dir = fds_dir_for_error if fds_dir_for_error != "Unknown" else os.getcwd()
+        initial_dir = fds_dir if fds_dir != "Unknown" else os.getcwd()
         csv_file_path = askopenfilename(
             title="Выберите файл *_hrr.csv",
             initialdir=initial_dir,
             filetypes=[("CSV файлы", "*_hrr.csv"), ("Все файлы", "*.*")]
         )
-        root_temp.destroy() # Уничтожаем временное окно
+        root_temp.destroy()
 
-        if not csv_file_path: # Пользователь отменил диалог
+        if not csv_file_path:
             messagebox.showinfo("Отмена", "Выбор файла отменен. Программа завершит работу.")
             return
         else:
@@ -334,8 +334,8 @@ def main():
     root.update_idletasks()
 
     try:
-        time_col = data['Time'] # Renamed for clarity
-        hrr_col = data['HRR']  # Renamed for clarity
+        time_col = data['Time'] # Переименовано для ясности
+        hrr_col = data['HRR']  # Переименовано для ясности
     except KeyError as e:
         root.progress_label.config(text=f"Ошибка: Отсутствуют колонки 'Time' или 'HRR'", foreground=colors["error"])
         messagebox.showerror("Ошибка данных", f"Ошибка: {e}, убедитесь, что CSV файл содержит колонки 'Time' и 'HRR'")
@@ -363,7 +363,7 @@ def main():
     plt.xlabel('Время (сек)')
     plt.ylabel('Мощность пожара (кВт)')
     plt.title('График мощности пожара', fontsize=12)
-    # plt.legend() # Legend is often unnecessary if only one line is plotted
+    # plt.legend() # Легенда не нужна, если график лишь один
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
 
     root.progress['value'] = 75
