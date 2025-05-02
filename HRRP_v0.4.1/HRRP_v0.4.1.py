@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import configparser
 import sys
+import glob # Добавлен импорт glob
 
 from tkinter import Tk, Toplevel, Button, Label
 from tkinter.filedialog import askopenfilename
@@ -11,7 +12,7 @@ from tkinter import ttk
 
 import os
 import numpy as np
-import tkinter as tk # Import tk for main window Frame
+import tkinter as tk # Импорт tk для основного окна
 
 def custom_message_box(callback_open_png, callback_open_folder, callback_close):
     def on_open_png():
@@ -27,7 +28,7 @@ def custom_message_box(callback_open_png, callback_open_folder, callback_close):
         top.destroy()
 
     top = Toplevel()
-    top.title("HRRP v0.4.0 - Готово")
+    top.title("HRRP v0.4.1 - Готово")
     top.geometry("500x260")
 
     current_directory = os.path.dirname(__file__)
@@ -38,7 +39,7 @@ def custom_message_box(callback_open_png, callback_open_folder, callback_close):
         top.iconbitmap(icon_path)
         top.wm_iconbitmap(icon_path)
     except Exception as e:
-        print(f"Warning: Could not load icon for dialog: {e}")
+        print(f"Внимание: Не удалось загрузить иконку для диалога: {e}")
 
     # Словарь цветов для стилизации (taken from PCTT)
     colors = {
@@ -132,23 +133,23 @@ def addToClipBoard(text):
     os.system(command)
 
 def main():
-    # --- Get UniqueID from command line arguments ---
+    # --- Получение UniqueID из аргументов командной строки ---
     UniqueID = "Unknown"
     if len(sys.argv) > 1:
         try:
             UniqueID = int(sys.argv[1])
-            print(f"Process ID received: {UniqueID}")
+            print(f"Получен ID процесса: {UniqueID}")
         except ValueError:
-            print(f"Warning: Invalid Process ID received '{sys.argv[1]}'. Using '{UniqueID}'.")
+            print(f"Внимание: Получен недопустимый ID процесса '{sys.argv[1]}'. Используется '{UniqueID}'.")
     else:
-        print("No Process ID received. Using '{UniqueID}'.")
-    # --- End Get UniqueID ---
+        print(f"Не получен ID процесса. Используется '{UniqueID}'.")
+    # --- Конец получения UniqueID ---
 
-    # --- Determine CSV file path from INI ---
+    # --- Определение пути к CSV файлу из INI ---
     config = configparser.ConfigParser()
     current_directory = os.path.dirname(__file__)
     parent_directory = os.path.abspath(os.path.join(current_directory, os.pardir))
-    inis_path = os.path.join(parent_directory, 'inis') # Go up one more level for inis
+    inis_path = os.path.join(parent_directory, 'inis') # Поднять на один уровень вверх для inis
     ini_file_path = os.path.join(inis_path, f'filePath_{UniqueID}.ini')
 
     fds_file_path = None
@@ -162,28 +163,32 @@ def main():
                 fds_dir = os.path.dirname(fds_file_path)
                 fds_basename = os.path.splitext(os.path.basename(fds_file_path))[0] # e.g., '21cd5693_tout' or '21cd5693'
 
-                # Pattern 1: Use the fds_basename as is and append _hrr.csv
-                csv_filename_pattern1 = f"{fds_basename}_hrr.csv" # e.g., 21cd5693_tout_hrr.csv
+                # Шаблон 1: Использовать fds_basename как есть и добавить _hrr.csv
+                csv_filename_pattern1 = f"{fds_basename}*_hrr.csv" # e.g., 21cd5693_tout_hrr.csv or 21cd5693_hrr.csv
                 csv_file_path_pattern1 = os.path.join(fds_dir, csv_filename_pattern1)
 
-                # Pattern 2: If fds_basename ends with _tout, remove it before appending _hrr.csv
+                # Шаблон 2: Если fds_basename заканчивается на _tout, удалить его перед добавлением _hrr.csv
                 fds_basename_without_tout = fds_basename
                 if fds_basename.endswith('_tout'):
                     fds_basename_without_tout = fds_basename[:-len('_tout')] # Remove _tout -> e.g., 21cd5693
 
-                csv_filename_pattern2 = f"{fds_basename_without_tout}_hrr.csv" # e.g., 21cd5693_hrr.csv
+                csv_filename_pattern2 = f"{fds_basename_without_tout}*_hrr.csv" # e.g., 21cd5693_hrr.csv
                 csv_file_path_pattern2 = os.path.join(fds_dir, csv_filename_pattern2)
 
-                # Check existence, prioritizing pattern 1 (direct match with _tout if present)
-                if os.path.isfile(csv_file_path_pattern1):
-                    csv_file_path = csv_file_path_pattern1
-                    print(f"Found CSV file (Pattern 1): {csv_file_path}")
-                elif os.path.isfile(csv_file_path_pattern2):
-                    csv_file_path = csv_file_path_pattern2
-                    print(f"Found CSV file (Pattern 2): {csv_file_path}")
+                # Проверка существования с использованием glob, приоритезируя шаблон 1
+                found_files_pattern1 = glob.glob(csv_file_path_pattern1)
+                if found_files_pattern1:
+                    csv_file_path = found_files_pattern1[0] # Взять первый совпавший файл
+                    print(f"Найден CSV файл (Шаблон 1): {csv_file_path}")
                 else:
-                    csv_file_path = None # Ensure it's None if neither is found
-                    print(f"Could not find {csv_filename_pattern1} or {csv_filename_pattern2} in {fds_dir}")
+                    # Если шаблон 1 не подходит, попробуйте шаблон 2
+                    found_files_pattern2 = glob.glob(csv_file_path_pattern2)
+                    if found_files_pattern2:
+                        csv_file_path = found_files_pattern2[0] # Взять первый совпавший файл
+                        print(f"Найден CSV файл (Шаблон 2): {csv_file_path}")
+                    else:
+                        csv_file_path = None # Убедиться, что он None, если ни один не найден
+                        print(f"Не удалось найти {csv_filename_pattern1} или {csv_filename_pattern2} в {fds_dir}")
 
             else:
                 messagebox.showerror("Ошибка INI", f"Не найдена секция [filePath] или ключ 'filePath' в {ini_file_path}")
@@ -195,9 +200,9 @@ def main():
         messagebox.showerror("Ошибка INI", f"INI файл не найден по пути: {ini_file_path}")
         return
 
-    if not csv_file_path: # Check if csv_file_path is None after attempts
-        # Need to reconstruct potential names for the error message
-        # Get base info from config again, as fds_file_path might be None
+    if not csv_file_path: # Проверяем, является ли csv_file_path None после попыток
+        # Нужно перестроить потенциальные имена для сообщения об ошибке
+        # Получаем базовую информацию из config снова, так как fds_file_path может быть None
         fds_dir_for_error = "Unknown"
         expected_name1 = "Unknown"
         expected_name2 = "Unknown"
@@ -206,24 +211,44 @@ def main():
                 config_fds_path = config['filePath']['filePath']
                 fds_dir_for_error = os.path.dirname(config_fds_path)
                 fds_basename_for_error = os.path.splitext(os.path.basename(config_fds_path))[0]
-                expected_name1 = f"{fds_basename_for_error}_hrr.csv"
+                expected_name1 = f"{fds_basename_for_error}*_hrr.csv"
                 
                 fds_basename_without_tout_for_error = fds_basename_for_error
                 if fds_basename_for_error.endswith('_tout'):
                     fds_basename_without_tout_for_error = fds_basename_for_error[:-len('_tout')]
-                expected_name2 = f"{fds_basename_without_tout_for_error}_hrr.csv"
+                expected_name2 = f"{fds_basename_without_tout_for_error}*_hrr.csv"
             except Exception:
                  pass # Keep unknowns if error reconstructing path
 
-        messagebox.showerror("Ошибка CSV", f"CSV файл не найден в директории: {fds_dir_for_error}\nОжидаемые имена: \n- {expected_name1}\n- {expected_name2}\nПроверьте имя файла и его расположение.")
-        return
-    # --- End Determine CSV file path ---
+        messagebox.showerror("Ошибка CSV", f"CSV файл не найден в директории: {fds_dir_for_error}\nОжидаемые имена: \n- {expected_name1}\n- {expected_name2}\n\nБудет предложено выбрать файл вручную.")
 
-    # --- GUI Setup ---
-    root = tk.Tk() # Use tk.Tk for the main window
-    root.title(f"HRRP v0.4.0 - ID: {UniqueID}")
+        # --- Вариант выбора файла вручную ---
+        root_temp = Tk() # Создаем временное скрытое окно корня для диалога
+        root_temp.withdraw()
+        root_temp.attributes('-topmost', True)
+        # Устанавливаем начальную директорию для диалога
+        initial_dir = fds_dir_for_error if fds_dir_for_error != "Unknown" else os.getcwd()
+        csv_file_path = askopenfilename(
+            title="Выберите файл *_hrr.csv",
+            initialdir=initial_dir,
+            filetypes=[("CSV файлы", "*_hrr.csv"), ("Все файлы", "*.*")]
+        )
+        root_temp.destroy() # Уничтожаем временное окно
 
-    # Define color scheme (simplified version from PCTT)
+        if not csv_file_path: # Пользователь отменил диалог
+            messagebox.showinfo("Отмена", "Выбор файла отменен. Программа завершит работу.")
+            return
+        else:
+            print(f"Выбран файл вручную: {csv_file_path}")
+        # --- Конец выбора файла вручную ---
+
+    # --- Конец определения пути к CSV файлу ---
+
+    # --- Настройка GUI ---
+    root = tk.Tk() # Используем tk.Tk для основного окна
+    root.title(f"HRRP v0.4.1 - ID: {UniqueID}")
+
+    # Определяем схему цветов (упрощенная версия из PCTT)
     colors = {
         "primary": "#3498db",
         "secondary": "#2ecc71",
@@ -233,9 +258,9 @@ def main():
         "error": "#c0392b"
     }
     root.configure(bg=colors["bg_light"])
-    root.geometry("400x150") # Adjusted size
+    root.geometry("400x150") # Изменен размер
 
-    # Icon
+    # Иконка
     icon_path = os.path.join(parent_directory, '.gitpics', 'hrrp.ico')
     try:
         root.iconbitmap(icon_path)
@@ -243,7 +268,7 @@ def main():
     except Exception as e:
         print(f"Warning: Could not load icon: {e}")
 
-    # Style configuration
+    # Настройка стиля
     style = ttk.Style()
     style.theme_use('clam')
     style.configure("TFrame", background=colors["bg_light"])
@@ -251,33 +276,33 @@ def main():
     style.configure("TProgressbar", troughcolor=colors["bg_light"], background=colors["secondary"])
     style.configure("Header.TLabel", font=("Segoe UI", 12, "bold"), foreground=colors["primary"])
 
-    # Main frame
+    # Основной фрейм
     main_frame = ttk.Frame(root, padding="15")
     main_frame.pack(fill=tk.BOTH, expand=True)
 
-    # Header
+    # Заголовок
     header_label = ttk.Label(main_frame, text="Обработка файла HRR...", style="Header.TLabel")
     header_label.pack(pady=(0, 10))
 
-    # Progress Bar
+    # Полоса прогресса
     root.progress = ttk.Progressbar(main_frame, orient="horizontal", mode="determinate", length=350)
     root.progress.pack(pady=5)
 
-    # Progress Label
+    # Лейбл прогресса
     root.progress_label = ttk.Label(main_frame, text="Инициализация...", wraplength=350)
     root.progress_label.pack(pady=5)
-    # --- End GUI Setup ---
+    # --- Конец настройки GUI ---
 
-    # Center window
+    # Центрирование окна
     root.update_idletasks()
     width = root.winfo_width()
     height = root.winfo_height()
     x = (root.winfo_screenwidth() // 2) - (width // 2)
     y = (root.winfo_screenheight() // 2) - (height // 2)
     root.geometry(f'{width}x{height}+{x}+{y}')
-    root.update_idletasks() # Make sure window is positioned before processing
+    root.update_idletasks() # Убедимся, что окно расположено перед началом обработки
 
-    # --- Start Processing ---
+    # --- Начало обработки ---
     root.progress_label.config(text=f"Чтение файла: {os.path.basename(csv_file_path)}")
     root.progress['value'] = 5
     root.update_idletasks()
@@ -374,11 +399,11 @@ def main():
     def Close():
         root.quit()  # Закрываем основное окно tkinter
 
-    # Schedule the custom message box to appear after withdrawing the main window
+    # Запланируем появление пользовательского диалога после скрытия основного окна
     root.withdraw()
     root.after(0, lambda: custom_message_box(OpenPNG, OpenPNGfolder, Close))
 
-    root.mainloop() # Start the main event loop
+    root.mainloop() # Запускаем главный цикл событий
 
 if __name__ == "__main__":
     main()
