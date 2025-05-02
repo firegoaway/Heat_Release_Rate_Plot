@@ -128,6 +128,24 @@ def custom_message_box(callback_open_png, callback_open_folder, callback_close):
     # Фокусируем кнопку просмотра графика по умолчанию
     view_btn.focus_set()
 
+def ask_load_method():
+    """Запрашивает у пользователя, как он хочет указать путь к CSV файлу."""
+    root_choice = tk.Tk()
+    root_choice.withdraw() # Скрываем маленькое окно root
+    root_choice.attributes('-topmost', True) # Убеждаемся, что оно на вершине
+
+    message = "Как загрузить путь к CSV файлу?"
+    title = "HRRP v0.4.1 - Выбор способа загрузки"
+    # Используем askyesno: True для INI, False для Manual
+    choice = messagebox.askyesno(title, f"{message}\n\nДа = Загрузить из конфигурационного файла INI\nНет = Выбрать csv файл вручную", icon='question')
+
+    root_choice.destroy() # Очищаем маленькое окно root
+
+    if choice: # True соответствует 'Да'
+        return 'ini'
+    else: # False соответствует 'Нет' или закрытию окна
+        return 'manual'
+
 def addToClipBoard(text):
     command = 'echo ' + text.strip() + '| clip'
     os.system(command)
@@ -145,89 +163,73 @@ def main():
         print(f"Не получен ID процесса. Используется '{UniqueID}'.")
     # --- Конец получения UniqueID ---
 
-    # --- Определение пути к CSV файлу из INI ---
+    # --- Запрос способа загрузки ---
+    load_method = ask_load_method()
+    # --- Конец запроса способа загрузки ---
+
+    # --- Определение пути к CSV файлу ---
+    csv_file_path = None
+    fds_dir = "Unknown" # Инициализируем fds_dir
     config = configparser.ConfigParser()
     current_directory = os.path.dirname(__file__)
     parent_directory = os.path.abspath(os.path.join(current_directory, os.pardir))
     inis_path = os.path.join(parent_directory, 'inis') # Поднять на один уровень вверх для inis
     ini_file_path = os.path.join(inis_path, f'filePath_{UniqueID}.ini')
 
-    fds_file_path = None
-    csv_file_path = None
-    fds_dir = "Unknown" # Инициализируем fds_dir
+    if load_method == 'ini':
+        print("Выбран метод загрузки: INI")
+        if os.path.isfile(ini_file_path):
+            try:
+                config.read(ini_file_path, encoding='utf-16')
+                if 'filePath' in config and 'filePath' in config['filePath']:
+                    fds_file_path = config['filePath']['filePath']
+                    fds_dir = os.path.dirname(fds_file_path)
+                    fds_basename = os.path.splitext(os.path.basename(fds_file_path))[0] # e.g., 'base_nfs_tout'
 
-    if os.path.isfile(ini_file_path):
-        try:
-            config.read(ini_file_path, encoding='utf-16')
-            if 'filePath' in config and 'filePath' in config['filePath']:
-                fds_file_path = config['filePath']['filePath']
-                fds_dir = os.path.dirname(fds_file_path)
-                fds_basename = os.path.splitext(os.path.basename(fds_file_path))[0] # e.g., 'base_nfs_tout'
+                    # --- Новая логика для поиска базовой части ---
+                    base_part = fds_basename
+                    postfixes = ['_nfs_tout', '_tout_nfs', '_nfs', '_tout']
+                    for postfix in postfixes:
+                        if base_part.endswith(postfix):
+                            base_part = base_part[:-len(postfix)]
+                            break # Удаляем только первый совпадающий постфикс с конца
+                    # --- Конец новой логики ---
 
-                # --- Новая логика для поиска базовой части ---
-                base_part = fds_basename
-                # Порядок важен: проверяем самые длинные комбинированные постфиксы первыми
-                postfixes = ['_nfs_tout', '_tout_nfs', '_nfs', '_tout']
-                for postfix in postfixes:
-                    if base_part.endswith(postfix):
-                        base_part = base_part[:-len(postfix)]
-                        break # Удаляем только первый совпадающий постфикс с конца
-                # --- Конец новой логики ---
+                    # Конструируем шаблон поиска с использованием извлеченной базовой части
+                    csv_filename_pattern = f"{base_part}*_hrr.csv" # e.g., base*_hrr.csv
+                    csv_file_path_pattern = os.path.join(fds_dir, csv_filename_pattern)
 
-                # Конструируем шаблон поиска с использованием извлеченной базовой части
-                csv_filename_pattern = f"{base_part}*_hrr.csv" # e.g., base*_hrr.csv
-                csv_file_path_pattern = os.path.join(fds_dir, csv_filename_pattern)
+                    # Поиск с использованием glob
+                    found_files = glob.glob(csv_file_path_pattern)
 
-                # Поиск с использованием glob
-                found_files = glob.glob(csv_file_path_pattern)
-
-                if found_files:
-                    # Сортируем найденные файлы для обработки потенциальных множественных совпадений (например, base_1_hrr.csv, base_2_hrr.csv)
-                    # Взятие первого алфавитно может быть достаточным, или отрегулировать, если нужно конкретная логика.
-                    found_files.sort()
-                    csv_file_path = found_files[0] # Взять первый совпавший файл
-                    print(f"Найден CSV файл по шаблону '{csv_filename_pattern}': {csv_file_path}")
+                    if found_files:
+                        found_files.sort()
+                        csv_file_path = found_files[0] # Взять первый совпавший файл
+                        print(f"Найден CSV файл по шаблону '{csv_filename_pattern}': {csv_file_path}")
+                    else:
+                        csv_file_path = None # Убедимся, что он None, если не найден
+                        print(f"Не удалось найти файл по шаблону '{csv_filename_pattern}' в {fds_dir}")
+                        messagebox.showwarning("Ошибка поиска CSV", f"Не удалось найти CSV файл по шаблону '{csv_filename_pattern}' в директории: {fds_dir}\n\nБудет предложено выбрать файл вручную.")
+                        load_method = 'manual' # Переключаемся на ручной выбор, если автопоиск не удался
                 else:
-                    csv_file_path = None # Убедимся, что он None, если не найден
-                    print(f"Не удалось найти файл по шаблону '{csv_filename_pattern}' в {fds_dir}")
+                    messagebox.showerror("Ошибка INI", f"Не найдена секция [filePath] или ключ 'filePath' в {ini_file_path}\n\nБудет предложено выбрать файл вручную.")
+                    load_method = 'manual' # Переключаемся на ручной выбор
+            except Exception as e:
+                messagebox.showerror("Ошибка чтения INI", f"Не удалось прочитать файл {ini_file_path}: {e}\n\nБудет предложено выбрать файл вручную.")
+                load_method = 'manual' # Переключаемся на ручной выбор
+        else:
+            messagebox.showwarning("Предупреждение INI", f"INI файл не найден по пути: {ini_file_path}\n\nБудет предложено выбрать CSV файл вручную.")
+            load_method = 'manual' # Переключаемся на ручной выбор, так как INI нет
 
-            else:
-                messagebox.showerror("Ошибка INI", f"Не найдена секция [filePath] или ключ 'filePath' в {ini_file_path}")
-                return # Выход, если структура INI неверна
-        except Exception as e:
-            messagebox.showerror("Ошибка чтения INI", f"Не удалось прочитать файл {ini_file_path}: {e}")
-            return # Выход при ошибке чтения INI
-    else:
-        messagebox.showerror("Ошибка INI", f"INI файл не найден по пути: {ini_file_path}")
-        return # Выход, если INI файл не существует
+    # --- Логика для ручного выбора файла (если выбран или как fallback) ---
+    if load_method == 'manual':
+        print("Выбран метод загрузки: Ручной")
+        # Попробуем определить начальную директорию из INI, если он был прочитан
+        initial_dir = fds_dir if fds_dir != "Unknown" else os.getcwd()
 
-    if not csv_file_path: # Если файл не найден автоматически
-        # --- Логика для ручного выбора файла ---
-        # Отрегулируйте сообщение об ошибке, чтобы отразить новую логику шаблона.
-        expected_name = "Unknown"
-        # Попробуйте восстановить ожидаемый шаблон для сообщения об ошибке
-        if 'filePath' in config and 'filePath' in config['filePath']:
-             try:
-                config_fds_path = config['filePath']['filePath'] # Предполагаем, что config был успешно прочитан, если мы здесь
-                fds_basename_for_error = os.path.splitext(os.path.basename(config_fds_path))[0]
-                base_part_for_error = fds_basename_for_error
-                postfixes_for_error = ['_nfs_tout', '_tout_nfs', '_nfs', '_tout']
-                for postfix in postfixes_for_error:
-                    if base_part_for_error.endswith(postfix):
-                        base_part_for_error = base_part_for_error[:-len(postfix)]
-                        break
-                expected_name = f"{base_part_for_error}*_hrr.csv"
-             except Exception:
-                 pass # Keep expected_name as Unknown if reconstruction fails
-        # Убедимся, что fds_dir используется в сообщении, если доступен
-        dir_for_msg = fds_dir if fds_dir != "Unknown" else "определенной директории"
-        messagebox.showerror("Ошибка CSV", f"CSV файл не найден в: {dir_for_msg}\nОжидаемый шаблон имени: {expected_name}\n\nБудет предложено выбрать файл вручную.")
-
-        # --- Код выбора файла вручную (остается почти неизменным) ---
         root_temp = Tk()
         root_temp.withdraw()
         root_temp.attributes('-topmost', True)
-        initial_dir = fds_dir if fds_dir != "Unknown" else os.getcwd()
         csv_file_path = askopenfilename(
             title="Выберите файл *_hrr.csv",
             initialdir=initial_dir,
@@ -236,11 +238,15 @@ def main():
         root_temp.destroy()
 
         if not csv_file_path:
-            messagebox.showinfo("Отмена", "Выбор файла отменен. Программа завершит работу.")
+            messagebox.showinfo("Отмена", "Выбор файла отменен. Утилита завершит работу.")
             return
         else:
             print(f"Выбран файл вручную: {csv_file_path}")
-        # --- Конец выбора файла вручную ---
+    
+    # --- Убедимся, что путь к файлу получен ---
+    if not csv_file_path:
+        messagebox.showerror("Ошибка", "Не удалось определить путь к CSV файлу. Утилита завершит работу.")
+        return
 
     # --- Конец определения пути к CSV файлу ---
 
@@ -334,11 +340,24 @@ def main():
     root.update_idletasks()
 
     try:
-        time_col = data['Time'] # Переименовано для ясности
-        hrr_col = data['HRR']  # Переименовано для ясности
+        # Determine the correct time column name
+        if 'Time' in data.columns:
+            time_col_name = 'Time'
+        elif 'FDS_HRR_Time' in data.columns:
+            time_col_name = 'FDS_HRR_Time'
+        else:
+            raise KeyError("Не найдена колонка времени ('Time' или 'FDS_HRR_Time')")
+
+        # Check for HRR column
+        if 'HRR' not in data.columns:
+             raise KeyError("Не найдена колонка мощности ('HRR')")
+
+        time_col = data[time_col_name]
+        hrr_col = data['HRR']
     except KeyError as e:
-        root.progress_label.config(text=f"Ошибка: Отсутствуют колонки 'Time' или 'HRR'", foreground=colors["error"])
-        messagebox.showerror("Ошибка данных", f"Ошибка: {e}, убедитесь, что CSV файл содержит колонки 'Time' и 'HRR'")
+        error_message = f"Ошибка: {e}, убедитесь, что CSV файл содержит необходимую колонку времени ('Time' или 'FDS_HRR_Time') и колонку мощности ('HRR')"
+        root.progress_label.config(text=error_message, foreground=colors["error"])
+        messagebox.showerror("Ошибка данных", error_message)
         root.destroy()
         return
 
